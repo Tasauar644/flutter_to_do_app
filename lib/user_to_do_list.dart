@@ -12,6 +12,8 @@ class DataFetcherWidget extends StatefulWidget {
 
 class _DataFetcherWidgetState extends State<DataFetcherWidget> {
   List<DocumentSnapshot> documents = [];
+  List<DocumentSnapshot> filteredDocuments = [];
+  TextEditingController searchController = TextEditingController();
 
   @override
   void initState() {
@@ -22,19 +24,28 @@ class _DataFetcherWidgetState extends State<DataFetcherWidget> {
   Future<void> fetchData() async {
     QuerySnapshot querySnapshot = await FirebaseFirestore.instance
         .collection('users')
-        .where('email', isEqualTo: widget.userEmail) // Use widget.userEmail
+        .where('email', isEqualTo: widget.userEmail)
         .get();
 
     setState(() {
       documents = querySnapshot.docs;
+      filteredDocuments = documents;
+    });
+  }
+
+  void searchList() {
+    String query = searchController.text;
+    setState(() {
+      filteredDocuments = documents
+          .where((doc) =>
+      doc.get('title').toString().toLowerCase().contains(query.toLowerCase()) ||
+          doc.get('description').toString().toLowerCase().contains(query.toLowerCase()))
+          .toList();
     });
   }
 
   Future<void> deleteDocument(String documentId) async {
-    await FirebaseFirestore.instance
-        .collection('users')
-        .doc(documentId)
-        .delete();
+    await FirebaseFirestore.instance.collection('users').doc(documentId).delete();
     fetchData();
   }
 
@@ -55,74 +66,102 @@ class _DataFetcherWidgetState extends State<DataFetcherWidget> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Data Fetcher'),
+        title: Text('Previously saved tasks'),
       ),
-      body: ListView.builder(
-        itemCount: documents.length,
-        itemBuilder: (context, index) {
-          var document = documents[index];
-          var documentId = document.id;
-          var fieldValue1 = document.get('title');
-          var fieldValue2 = document.get('description');
-          return Column(
-            children: [
-              Text(
-                fieldValue1 ?? '',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                ),
-              ),
-              Text(
-                fieldValue2 ?? '',
-                style: TextStyle(
-                  fontSize: 14,
-                ),
-              ),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  IconButton(
-                    icon: Icon(Icons.edit),
-                    onPressed: () {
-                      navigateToEditScreen(document);
-                    },
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: searchController,
+                    decoration: InputDecoration(
+                      labelText: 'Search',
+                      prefixIcon: Icon(Icons.search),
+                      border: OutlineInputBorder(),
+                    ),
                   ),
-                  IconButton(
-                    icon: Icon(Icons.delete),
-                    onPressed: () {
-                      showDialog(
-                        context: context,
-                        builder: (BuildContext context) {
-                          return AlertDialog(
-                            title: Text('Delete Entry'),
-                            content: Text('Are you sure you want to delete this entry?'),
-                            actions: [
-                              TextButton(
-                                child: Text('Cancel'),
-                                onPressed: () {
-                                  Navigator.of(context).pop();
-                                },
-                              ),
-                              TextButton(
-                                child: Text('Delete'),
-                                onPressed: () {
-                                  deleteDocument(documentId);
-                                  Navigator.of(context).pop();
-                                },
-                              ),
-                            ],
-                          );
-                        },
-                      );
-                    },
-                  ),
-                ],
-              ),
-              Divider(),
-            ],
-          );
-        },
+                ),
+                SizedBox(width: 16.0),
+                ElevatedButton(
+                  onPressed: searchList,
+                  child: Text('Search'),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: ListView.builder(
+              itemCount: filteredDocuments.length,
+              itemBuilder: (context, index) {
+                var document = filteredDocuments[index];
+                var documentId = document.id;
+                var fieldValue1 = document.get('title');
+                var fieldValue2 = document.get('description');
+                return Column(
+                  children: [
+                    Text(
+                      fieldValue1 ?? '',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                    Text(
+                      fieldValue2 ?? '',
+                      style: TextStyle(
+                        fontSize: 14,
+                      ),
+                    ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        IconButton(
+                          icon: Icon(Icons.edit),
+                          onPressed: () {
+                            navigateToEditScreen(document);
+                          },
+                        ),
+                        IconButton(
+                          icon: Icon(Icons.delete),
+                          onPressed: () {
+                            showDialog(
+                              context: context,
+                              builder: (BuildContext context) {
+                                return AlertDialog(
+                                  title: Text('Delete Entry'),
+                                  content: Text('Are you sure you want to delete this entry?'),
+                                  actions: [
+                                    TextButton(
+                                      child: Text('Cancel'),
+                                      onPressed: () {
+                                        Navigator.of(context).pop();
+                                      },
+                                    ),
+                                    TextButton(
+                                      child: Text('Delete'),
+                                      onPressed: () {
+                                        deleteDocument(documentId);
+                                        Navigator.of(context).pop();
+                                      },
+                                    ),
+                                  ],
+                                );
+                              },
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                    Divider(),
+                  ],
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -138,20 +177,20 @@ class EditScreen extends StatefulWidget {
 }
 
 class _EditScreenState extends State<EditScreen> {
-  TextEditingController _titleController = TextEditingController();
-  TextEditingController _descriptionController = TextEditingController();
+  TextEditingController titleController = TextEditingController();
+  TextEditingController descriptionController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    _titleController.text = widget.document.get('title') ?? '';
-    _descriptionController.text = widget.document.get('description') ?? '';
+    titleController.text = widget.document.get('title') ?? '';
+    descriptionController.text = widget.document.get('description') ?? '';
   }
 
   @override
   void dispose() {
-    _titleController.dispose();
-    _descriptionController.dispose();
+    titleController.dispose();
+    descriptionController.dispose();
     super.dispose();
   }
 
@@ -160,8 +199,8 @@ class _EditScreenState extends State<EditScreen> {
         .collection('users')
         .doc(widget.document.id)
         .update({
-      'title': _titleController.text,
-      'description': _descriptionController.text,
+      'title': titleController.text,
+      'description': descriptionController.text,
     });
 
     Navigator.pop(context, true);
@@ -185,7 +224,7 @@ class _EditScreenState extends State<EditScreen> {
               ),
             ),
             TextField(
-              controller: _titleController,
+              controller: titleController,
             ),
             SizedBox(height: 16.0),
             Text(
@@ -195,7 +234,7 @@ class _EditScreenState extends State<EditScreen> {
               ),
             ),
             TextField(
-              controller: _descriptionController,
+              controller: descriptionController,
             ),
             SizedBox(height: 16.0),
             ElevatedButton(
